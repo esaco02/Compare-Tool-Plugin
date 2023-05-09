@@ -90,7 +90,7 @@
             <select class="select-content-type">
 				<option value="">Select an option</option>
                 <option value="members">Members</option>
-                <option value="posts">Posts</option>
+                <option value="posts">Posts - Coming Soon!</option>
             </select>
         </div>
     </div>     
@@ -128,13 +128,14 @@
             let isEnable = $(this).find('.field_enabled').prop("checked");
             let field_title = $(this).find('.field_title').val();
             let field_description = $(this).find('.field_description').val();
-            if(isEnable == true){
-                params.push({
-                    "field_name": field_name, 
-                    "field_title" : field_title,
-                    "field_description" : field_description
-                });
-            }
+
+            params.push({
+                "field_name": field_name, 
+                "field_title" : field_title,
+                "field_description" : field_description,
+                "enable" : isEnable ? "1" : "0"
+            });
+            
 
         });
 

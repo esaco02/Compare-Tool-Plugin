@@ -13,41 +13,57 @@ $action = $_POST['action'];
 
 switch($action) {
     case 'get_fields':
-        $ignore_fields = ["user_id", "subscription_id", "filename", "password", "active", "token", "ref_code", "signup_date", "cookie", "last_login", "position", "gmap", "lat", "lon", "parent_id", "no_geo", "stripe_account_id"];
+        $ignore_fields = ["user_id", "subscription_id", "filename", "password", "active", "token", "ref_code", "signup_date", "cookie", "last_login", "gmap", "lat", "lon", "parent_id", "no_geo", "stripe_account_id", "first_name", "last_name", "email" ,"company" ,"state_ln", "country_ln", "modtime", "bitly", "profession_id", "facebook_id", "google_id", "user_consent"];
         $content_type = $_POST['content_type'];
         $html = "";
+        $htmlDisabledFields = "";
         if($content_type === "members"){
             
-
+            /* GET ALL THE FIELDS SAVED FOR MEMBER CONTENT TYPE */
             $select = "SELECT * FROM `compare-tool-content-settings` WHERE database_table_key='users_data';" ;
             $sql = mysql(brilliantDirectories::getDatabaseConfiguration('database'), $select);
-            $fields_enabled = [];
+            $fields_saved = [];
             $member_specialities = null;
             while ($data = mysql_fetch_assoc($sql)) {                
                 if($data['comparison_variable_name'] == "Member Specialities"){
                     $member_specialities =  $data;
                 }else{
-                    $fields_enabled[] = $data;
+                    $fields_saved[] = $data;
                 }             
             }  
-
-            if($member_specialities){
-                $html .= get_field_html(true, "Member Specialities", $member_specialities['comparison_variable_title'], $member_specialities['comparison_variable_description'] );
+            
+            /* CREATE THE HTML FOR THE SPECIALITIES FIELD */
+            if($member_specialities){                
+                if($member_specialities['enable']){
+                    $html .= get_field_html($member_specialities['enable'], "Member Specialities", $member_specialities['comparison_variable_title'], $member_specialities['comparison_variable_description'] );
+                }else{
+                    $htmlDisabledFields .= get_field_html($member_specialities['enable'], "Member Specialities", $member_specialities['comparison_variable_title'], $member_specialities['comparison_variable_description'] );
+                }
             }else{
-                $html .= get_field_html(false, "Member Specialities", "", "" );
+                $htmlDisabledFields .= get_field_html(false, "Member Specialities", "", "" );
             }
-
+            
+            /* GET ALL THE FIELDS FROM THE USER_DATA TABLE */
             $select = "SELECT `column_name` 
             FROM `INFORMATION_SCHEMA`.`COLUMNS` 
             WHERE `TABLE_NAME`='users_data';";
             $sql = mysql(brilliantDirectories::getDatabaseConfiguration('database'), $select);
             $column_names  = [];
+
+            /* CREATE THE HTML WITH THE FIELDS ENABLED AND DISABLED */
             while ($data = mysql_fetch_assoc($sql)) {
                 if(!in_array($data['column_name'],$ignore_fields, true)){
-                    $isEnabledValues = isEnabledValues($data['column_name'],$fields_enabled);
-                    $html .= get_field_html($isEnabledValues[0], $data['column_name'], $isEnabledValues[1], $isEnabledValues[2]);
+                    $fieldSavedValues = isSavedValues($data['column_name'],$fields_saved);
+                    if($fieldSavedValues[0]){
+                        $html .= get_field_html($fieldSavedValues[0], $data['column_name'], $fieldSavedValues[1], $fieldSavedValues[2]);
+                    }else{
+                        $htmlDisabledFields .= get_field_html($fieldSavedValues[0], $data['column_name'], $fieldSavedValues[1], $fieldSavedValues[2]);
+                    }
+                    
                 }                
             }
+
+            $html = $html . $htmlDisabledFields;
           
         }
 
@@ -68,15 +84,21 @@ switch($action) {
         
         $settings = $_POST['settings'];
         $db_values = [];
+        /* CREATE THE SQL QUERY WITH THE POST PARAMETERS */
         foreach($settings as $setting){
-            $db_values[] = "('".$setting["field_name"]."','".$db_table."','".$setting["field_title"]."','".$setting["field_description"]."', '".$content_type."')";
+            $enable = $setting["enable"] ? 1 : 0;
+            $db_values[] = "('".$setting["field_name"]."','".$db_table."','".$setting["field_title"]."','".$setting["field_description"]."', '".$content_type."', ". $enable .")";
         }
+        
 
-        $delete = "DELETE FROM `compare-tool-content-settings` WHERE database_table_key = '".$db_table."';" ;
-        mysql(brilliantDirectories::getDatabaseConfiguration('database'), $delete);        
-
-        $update = "INSERT INTO `compare-tool-content-settings`(`comparison_variable_name`, `database_table_key`, `comparison_variable_title`, `comparison_variable_description`, `content_type`) VALUES ";
+        $update = "INSERT INTO `compare-tool-content-settings`(`comparison_variable_name`, `database_table_key`, `comparison_variable_title`, `comparison_variable_description`, `content_type`, `enable`) VALUES ";
         $update .= implode(",", $db_values);
+        $update .= " ON DUPLICATE KEY UPDATE `comparison_variable_title` = VALUES(`comparison_variable_title`),";
+        $update .= " `comparison_variable_description` = VALUES(`comparison_variable_description`),";
+        $update .= " `content_type` = VALUES(`content_type`),";
+        $update .= " `enable` = VALUES(`enable`);";
+
+        
         mysql(brilliantDirectories::getDatabaseConfiguration('database'), $update);
 
         echo "ok";
@@ -117,10 +139,10 @@ function get_field_html($enabled, $name, $title, $description ){
             </div>";
 }
 
-function isEnabledValues($value, $arr){
+function isSavedValues($value, $arr){
     foreach($arr as $data){
         if($data['comparison_variable_name'] === $value){
-            return [true, $data['comparison_variable_title'],$data['comparison_variable_description']];
+            return [$data['enable'], $data['comparison_variable_title'],$data['comparison_variable_description']];
         }
     }
     return [false, "",""];
